@@ -3,9 +3,8 @@
 #
 import argparse
 import os.path
-from os import listdir
-from os.path import isfile, join
-import pathlib
+from os import scandir
+from os.path import isfile
 import hashlib
 import shutil
 import sys
@@ -44,24 +43,23 @@ def hash_file(file):
 
 
 def traverse(current_path, results):
-    # Don't follow symlinks.
-    if pathlib.Path(current_path).is_symlink():
-        return
+    try:
+        for file in scandir(current_path):
+            progress(file.path)
 
-    for file in listdir(current_path):
-        try:
-            full_name = join(current_path, file)
-            progress(full_name)
-
-            if isfile(full_name):
+            if file.is_file(follow_symlinks=False):
                 # Convert this to a string to make merging loaded JSON debug files easier.
-                size = str(os.path.getsize(full_name))
+                try:
+                    size = file.stat(follow_symlinks=False).st_size
+                except OSError:
+                    print("Unable to get size of file " + file.path + ", skipping.")
+                    continue
 
                 # We only compute hashes when there are two files of the same size,
                 # otherwise we'll leave an indicator and run the hash later if we find a second same-sized file.
                 if size not in results:
                     results[size] = {
-                        'first': full_name
+                        'first': file.path
                     }
                     continue
 
@@ -69,17 +67,19 @@ def traverse(current_path, results):
                     results[size][hash_file(results[size]['first'])] = [results[size]['first']]
                     results[size].pop('first', None)
 
-                hsum = hash_file(full_name)
+                hsum = hash_file(file.path)
                 if hsum not in results[size]:
-                    results[size][hsum] = [full_name]
+                    results[size][hsum] = [file.path]
                 else:
-                    results[size][hsum].append(full_name)
+                    results[size][hsum].append(file.path)
             else:
-                traverse(full_name, results)
-        except Exception as e:
-            print("Exception: ", "\n\nCurrent File:", full_name, "\n\nSize:", os.path.getsize(full_name),
-                  "\n\nCurrent Results:", results, "\n\n")
-            raise e
+                # Don't follow symlinks.
+                if file.is_symlink():
+                    return
+
+                traverse(file.path, results)
+    except Exception:
+        print("Unable to scan directory: " + current_path)
 
 
 def main():
