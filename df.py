@@ -33,11 +33,14 @@ progress.count = 25
 
 
 def hash_file(file):
-    hash = hashlib.sha1()
-    f = open(file, "rb")
-    hash.update(f.read())
-    f.close()
-    return hash.hexdigest()
+    try:
+        hash = hashlib.sha1()
+        f = open(file, "rb")
+        hash.update(f.read())
+        f.close()
+        return hash.hexdigest()
+    except Exception:
+        return "Unable to open file to hash"
 
 
 def traverse(current_path, results):
@@ -51,7 +54,8 @@ def traverse(current_path, results):
             progress(full_name)
 
             if isfile(full_name):
-                size = os.path.getsize(full_name)
+                # Convert this to a string to make merging loaded JSON debug files easier.
+                size = str(os.path.getsize(full_name))
 
                 # We only compute hashes when there are two files of the same size,
                 # otherwise we'll leave an indicator and run the hash later if we find a second same-sized file.
@@ -84,6 +88,8 @@ def main():
                                      "paths will be compared to each other.", nargs='+')
     parser.add_argument('-d', '--debug', help="Enable debug mode. This will output a debug file containing the results"
                         " array", action="store_true")
+    parser.add_argument('-r', '--resume', help="Resume a previous run by using a generated debug file",
+                        default=None, type=str)
     args = parser.parse_args()
 
     # Quick check that the paths are valid before we continue
@@ -97,6 +103,21 @@ def main():
         exit()
 
     results = {}
+
+    if args.resume is not None:
+        if not isfile(args.resume):
+            print("Cannot load previous results, file " + args.resume + " does not exist.")
+            exit()
+
+        print("Loading results from " + args.resume + "...")
+        try:
+            f = open(args.resume, "r")
+            results = json.load(f)
+            f.close()
+        except Exception:
+            print("Unable to read or parse debug file.")
+            exit()
+        print("Loading complete.");
 
     for path in args.PATH:
         traverse(path, results)
