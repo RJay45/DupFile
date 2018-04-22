@@ -13,9 +13,9 @@ import json
 from time import gmtime, strftime
 
 
-def progress(filename):
+def progress(filename, size):
     progress.count += 1
-    if progress.count >= 25:
+    if progress.count >= 25 or size > 1073741824:
         progress.count = 0
         try:
             output = "Current File: " + filename
@@ -32,22 +32,25 @@ def progress(filename):
 progress.count = 25
 
 
-def hash_file(file):
+def hash_file(file_name, length):
     try:
-        hash = hashlib.sha1()
-        f = open(file, "rb")
-        hash.update(f.read())
-        f.close()
-        return hash.hexdigest()
+        file_hash = hashlib.sha1()
+        bytes_read = 0
+        chunk = 4096
+
+        with open(file_name, "rb") as file:
+            while bytes_read < length:
+                file_hash.update(file.read(chunk))
+                bytes_read += chunk
+
+        return file_hash.hexdigest()
     except Exception:
-        return "Unable to open file to hash"
+        return "Unable to hash file"
 
 
 def traverse(current_path, results, recurse=True):
     try:
         for file in scandir(current_path):
-            progress(file.path)
-
             if file.is_file(follow_symlinks=False):
                 # Convert this to a string to make merging loaded JSON debug files easier.
                 try:
@@ -55,6 +58,8 @@ def traverse(current_path, results, recurse=True):
                 except OSError:
                     print("Unable to get size of file " + file.path + ", skipping.")
                     continue
+
+                progress(file.path, size)
 
                 # We only compute hashes when there are two files of the same size,
                 # otherwise we'll leave an indicator and run the hash later if we find a second same-sized file.
@@ -65,10 +70,10 @@ def traverse(current_path, results, recurse=True):
                     continue
 
                 elif 'first' in results[size]:
-                    results[size][hash_file(results[size]['first'])] = [results[size]['first']]
+                    results[size][hash_file(results[size]['first'], size)] = [results[size]['first']]
                     results[size].pop('first', None)
 
-                hsum = hash_file(file.path)
+                hsum = hash_file(file.path, size)
                 if hsum not in results[size]:
                     results[size][hsum] = [file.path]
                 else:
@@ -79,8 +84,8 @@ def traverse(current_path, results, recurse=True):
                     return
 
                 traverse(file.path, results)
-    except Exception:
-        print("Unable to scan directory: " + current_path)
+    except Exception as ex:
+        print("\nUnable to scan directory: " + current_path)
 
 
 def main():
@@ -120,7 +125,7 @@ def main():
         except Exception:
             print("Unable to read or parse debug file.")
             exit()
-        print("Loading complete.");
+        print("Loading complete.")
 
     for path in args.PATH:
         traverse(path, results, not args.no_recurse)
@@ -143,10 +148,8 @@ def main():
     f.close()
     if args.debug:
         f = open("./debug_" + datestamp + ".txt", "w")
-
         f.write(json.dumps(results, indent=2))
         f.close()
 
 
 main()
-
