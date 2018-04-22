@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 #
 # (c) Jason "RJay45" Griffith 2017
 #
@@ -42,7 +43,7 @@ def hash_file(file):
         return "Unable to open file to hash"
 
 
-def traverse(current_path, results):
+def traverse(current_path, results, recurse=True):
     try:
         for file in scandir(current_path):
             progress(file.path)
@@ -72,7 +73,7 @@ def traverse(current_path, results):
                     results[size][hsum] = [file.path]
                 else:
                     results[size][hsum].append(file.path)
-            else:
+            elif recurse:
                 # Don't follow symlinks.
                 if file.is_symlink():
                     return
@@ -83,13 +84,15 @@ def traverse(current_path, results):
 
 
 def main():
-    parser = argparse.ArgumentParser("DupFile")
+    parser = argparse.ArgumentParser()
     parser.add_argument('PATH', help="Path to search for duplicate files. If multiple paths are given, files from all "
                                      "paths will be compared to each other.", nargs='+')
     parser.add_argument('-d', '--debug', help="Enable debug mode. This will output a debug file containing the results"
                         " array", action="store_true")
     parser.add_argument('-r', '--resume', help="Resume a previous run by using a generated debug file",
                         default=None, type=str)
+    parser.add_argument('-R', '--no-recurse', help="Disable file recursion",
+                        default=False, action="store_true")
     args = parser.parse_args()
 
     # Quick check that the paths are valid before we continue
@@ -120,7 +123,7 @@ def main():
         print("Loading complete.");
 
     for path in args.PATH:
-        traverse(path, results)
+        traverse(path, results, not args.no_recurse)
 
     datestamp = strftime("%Y%m%d_%H%M%S", gmtime())
 
